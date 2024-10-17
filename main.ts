@@ -71,6 +71,7 @@ app.use(
 
 app.get("/", (c: Context) => {
   return c.json({
+    totalCount: cachedMessages.length,
     items: cachedMessages,
   });
 });
