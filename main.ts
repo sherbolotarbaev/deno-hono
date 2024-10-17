@@ -66,7 +66,7 @@ app.use(
 
 app.get("/", (c: Context) => {
   return c.json({
-    messages: cachedMessages,
+    items: cachedMessages,
   });
 });
 
@@ -76,7 +76,39 @@ app.post("/", validateMessage, (c: Context) => {
   addNewMessage(message);
 
   return c.json({
-    messages: cachedMessages,
+    items: cachedMessages,
+  });
+});
+
+app.delete("/:id", (c: Context) => {
+  const id = Number(c.req.param("id"));
+  const messageIndex = cachedMessages.findIndex((msg) => msg.id === id);
+
+  if (messageIndex === -1) {
+    return c.json({
+      statusCode: 404,
+      error: "Not Found",
+      message: `Message with ID ${id} not found.`,
+    }, 404);
+  }
+
+  cachedMessages.splice(messageIndex, 1);
+  messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
+
+  return c.json({
+    statusCode: 200,
+    message: `Message with ID ${id} deleted successfully.`,
+    items: cachedMessages,
+  });
+});
+
+app.delete("/", (c: Context) => {
+  cachedMessages.length = 0;
+  messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
+
+  return c.json({
+    statusCode: 200,
+    message: "All messages deleted successfully.",
   });
 });
 
