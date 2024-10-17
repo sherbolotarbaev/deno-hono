@@ -1,5 +1,9 @@
-import { type Context, Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { secureHeaders } from "hono/secure-headers";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 
 const PORT = 999;
 
@@ -9,18 +13,15 @@ interface IMessage {
   createdAt: Date;
 }
 
-interface IMessageRequest {
-  message: string;
-}
-
+const cacheDate = `${new Date().getDate()}_${new Date().getMonth() + 1}_${
+  new Date().getFullYear()
+}`;
 const messagesCache = new Map<string, IMessage[]>();
 
-const MESSAGES_CACHE_KEY = `messages_cache_${new Date().getDate()}_${
-  new Date().getMonth() + 1
-}_${new Date().getFullYear()}`;
+const MESSAGES_CACHE_KEY = `messages_cache_${cacheDate}`;
 const cachedMessages: IMessage[] = messagesCache.get(MESSAGES_CACHE_KEY) || [];
 
-function addNewMessage(body: string) {
+function addNewMessage(body: string): IMessage {
   const newMessage: IMessage = {
     id: cachedMessages.length + 1,
     body,
@@ -28,63 +29,70 @@ function addNewMessage(body: string) {
   };
   cachedMessages.push(newMessage);
   messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
+  return newMessage;
 }
 
-const validateMessage: MiddlewareHandler = async (
-  c: Context,
-  next: () => Promise<void>,
-) => {
-  try {
-    const { message }: IMessageRequest = await c.req.json<IMessageRequest>();
-
-    if (!message || message.trim().length === 0) {
-      return c.json({
-        statusCode: 400,
-        error: "Bad Request",
-        message: "Invalid message. Message cannot be empty.",
-      }, 400);
-    }
-
-    // Attach the valid message to the context for the next handler
-    c.set("message", message);
-
-    // Proceed to the next handler
-    await next();
-  } catch {
-    return c.json({
-      statusCode: 400,
-      error: "Bad Request",
-      message: "Invalid JSON structure.",
-    }, 400);
-  }
-};
+// Validation schema
+const messageSchema = z.object({
+  message: z.string({
+    required_error: "Message is required.",
+    invalid_type_error: "Message must be a string.",
+  }).min(1, "Message must be at least 1 character long.").max(
+    280,
+    "Message must be 280 characters or less.",
+  ),
+});
 
 const app = new Hono();
 
-// CORS config
+// Middleware
+app.use("*", logger());
+app.use("*", secureHeaders());
 app.use(
-  "*", // route
+  "*",
   cors({
     origin: "*",
+    allowMethods: ["GET", "POST", "DELETE"],
   }),
 );
 
+app.onError((_err: unknown, c: Context) => {
+  return c.json({
+    statusCode: 500,
+    error: "Internal Server Error",
+    message: "An unexpected error occurred.",
+  }, 500);
+});
+
 app.get("/", (c: Context) => {
   return c.json({
+    cacheDate,
     totalCount: cachedMessages.length,
     items: cachedMessages,
   });
 });
 
-app.post("/", validateMessage, (c: Context) => {
-  const message = c.get<string>("message");
+app.post(
+  "/",
+  zValidator("json", messageSchema, (result, c) => {
+    if (!result.success) {
+      const zodError = result.error;
+      return c.json({
+        statusCode: 400,
+        error: "Bad Request",
+        messages: zodError.issues.map((issue) => issue.message),
+      }, 400);
+    }
+  }),
+  (c: Context) => {
+    const { message } = c.req.valid("json");
+    const newMessage = addNewMessage(message);
 
-  addNewMessage(message);
-
-  return c.json({
-    items: cachedMessages,
-  });
-});
+    return c.json({
+      item: newMessage,
+    });
+  },
+);
 
 app.delete("/:id", (c: Context) => {
   const id = Number(c.req.param("id"));
@@ -102,8 +110,8 @@ app.delete("/:id", (c: Context) => {
   messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
 
   return c.json({
-    statusCode: 200,
     message: `Message with ID ${id} deleted successfully.`,
+    totalCount: cachedMessages.length,
     items: cachedMessages,
   });
 });
@@ -113,7 +121,6 @@ app.delete("/", (c: Context) => {
   messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
 
   return c.json({
-    statusCode: 200,
     message: "All messages deleted successfully.",
   });
 });

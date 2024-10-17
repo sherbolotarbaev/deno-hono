@@ -1,6 +1,8 @@
 {
   "imports": {
-    "hono": "jsr:@hono/hono@^4.6.5"
+    "@hono/zod-validator": "npm:@hono/zod-validator@^0.4.1",
+    "hono": "jsr:@hono/hono@^4.6.5",
+    "zod": "npm:zod@^3.23.8"
   },
   "tasks": {
     "start": "deno run --allow-net main.ts",
