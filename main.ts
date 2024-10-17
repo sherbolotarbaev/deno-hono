@@ -6,6 +6,7 @@ const PORT = 999;
 interface IMessage {
   id: number;
   body: string;
+  createdAt: Date;
 }
 
 interface IMessageRequest {
@@ -20,7 +21,11 @@ const MESSAGES_CACHE_KEY = `messages_cache_${new Date().getDate()}_${
 const cachedMessages: IMessage[] = messagesCache.get(MESSAGES_CACHE_KEY) || [];
 
 function addNewMessage(body: string) {
-  const newMessage: IMessage = { id: cachedMessages.length + 1, body };
+  const newMessage: IMessage = {
+    id: cachedMessages.length + 1,
+    body,
+    createdAt: new Date(),
+  };
   cachedMessages.push(newMessage);
   messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
 }
