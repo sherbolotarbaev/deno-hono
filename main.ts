@@ -11,6 +11,7 @@ interface IMessage {
   id: number;
   body: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const cacheDate = `${new Date().getDate()}_${new Date().getMonth() + 1}_${
@@ -26,10 +27,21 @@ function addNewMessage(body: string): IMessage {
     id: cachedMessages.length + 1,
     body,
     createdAt: new Date(),
+    updatedAt: new Date(),
   };
   cachedMessages.push(newMessage);
   messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
   return newMessage;
+}
+
+function updateMessage(id: number, body: string): IMessage | null {
+  const messageIndex = cachedMessages.findIndex((msg) => msg.id === id);
+  if (messageIndex === -1) return null;
+
+  cachedMessages[messageIndex].body = body;
+  cachedMessages[messageIndex].updatedAt = new Date();
+  messagesCache.set(MESSAGES_CACHE_KEY, cachedMessages);
+  return cachedMessages[messageIndex];
 }
 
 // Validation schema
@@ -52,7 +64,7 @@ app.use(
   "*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "DELETE"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE"],
   }),
 );
 
@@ -90,6 +102,37 @@ app.post(
 
     return c.json({
       item: newMessage,
+    });
+  },
+);
+
+app.put(
+  "/:id",
+  zValidator("json", messageSchema, (result, c) => {
+    if (!result.success) {
+      const zodError = result.error;
+      return c.json({
+        statusCode: 400,
+        error: "Bad Request",
+        messages: zodError.issues.map((issue) => issue.message),
+      }, 400);
+    }
+  }),
+  (c: Context) => {
+    const id = Number(c.req.param("id"));
+    const { message } = c.req.valid("json");
+    const updatedMessage = updateMessage(id, message);
+
+    if (!updatedMessage) {
+      return c.json({
+        statusCode: 404,
+        error: "Not Found",
+        message: `Message with ID ${id} not found.`,
+      }, 404);
+    }
+
+    return c.json({
+      item: updatedMessage,
     });
   },
 );
