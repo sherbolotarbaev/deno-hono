@@ -215,6 +215,11 @@ function incrementViewCount(slug: string): IBlogView {
   return view;
 }
 
+// Helper function to get all views
+function getAllViews(): IBlogView[] {
+  return Array.from(viewsCache.values());
+}
+
 const app = new Hono();
 
 // Middleware
@@ -256,6 +261,14 @@ app.get("/views/:slug", (c: Context) => {
     slug: updatedView.slug,
     count: updatedView.count,
     lastViewed: updatedView.lastViewed,
+  });
+});
+
+app.get("/views", (c: Context) => {
+  const allViews = getAllViews();
+
+  return c.json({
+    views: allViews,
   });
 });
 
